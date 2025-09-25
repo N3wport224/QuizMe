@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Quiz</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .card {
+            background-color: #2d3748;
+            border-radius: 1.5rem;
+            padding: 2rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+        .correct-answer {
+            background-color: #38a169; /* Green for correct */
+        }
+        .incorrect-answer {
+            background-color: #e53e3e; /* Red for incorrect */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1 class="text-3xl md:text-4xl font-extrabold mb-4 text-white">CSV Quiz</h1>
+        <p class="text-lg text-gray-400 mb-8">
+            Upload a CSV file to begin your quiz. 
+            The first column should be the question, the second column should be the correct answer, and the following columns should be the incorrect options. You can use double quotes to include commas within your text.
+        </p>
+
+        <!-- File Upload Section -->
+        <div id="upload-section" class="space-y-4">
+            <label for="csvFile" class="block text-xl font-medium text-gray-300">Choose a CSV file:</label>
+            <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-violet-50 file:text-violet-700
+                hover:file:bg-violet-100 cursor-pointer transition duration-300 ease-in-out">
+            <p id="file-status" class="text-gray-400 mt-2"></p>
+        </div>
+
+        <!-- Quiz Section (hidden initially) -->
+        <div id="quiz-section" class="hidden space-y-6">
+            <div class="space-y-2">
+                <p id="question" class="text-2xl font-semibold mb-4 text-white">Question goes here.</p>
+                <div id="choices-container" class="grid grid-cols-1 gap-4">
+                    <!-- Multiple choice buttons will be generated here -->
+                </div>
+                <p id="feedback" class="text-lg font-medium mt-2 transition-opacity duration-500"></p>
+            </div>
+            <button id="next-btn" class="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl hidden transition duration-300 ease-in-out">Next Question</button>
+        </div>
+        
+        <!-- Score and Restart Section -->
+        <div id="score-section" class="hidden mt-6">
+            <p id="score-display" class="text-xl font-semibold">Score: 0</p>
+            <button id="restart-btn" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-xl mt-4 transition duration-300 ease-in-out">Restart Quiz</button>
+        </div>
+    </div>
+
+    <script>
+        const csvFile = document.getElementById('csvFile');
+        const uploadSection = document.getElementById('upload-section');
+        const quizSection = document.getElementById('quiz-section');
+        const scoreSection = document.getElementById('score-section');
+        const fileStatus = document.getElementById('file-status');
+
+        const questionEl = document.getElementById('question');
+        const choicesContainer = document.getElementById('choices-container');
+        const nextBtn = document.getElementById('next-btn');
+        const feedbackEl = document.getElementById('feedback');
+        const scoreDisplay = document.getElementById('score-display');
+        const restartBtn = document.getElementById('restart-btn');
+
+        let quizData = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let isAnswered = false;
+
+        csvFile.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                fileStatus.textContent = 'No file selected.';
+                return;
+            }
+            fileStatus.textContent = 'File selected: ' + file.name;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                quizData = parseCSV(text);
+                if (quizData.length > 0) {
+                    fileStatus.textContent = `File loaded successfully! ${quizData.length} questions available.`;
+                    setTimeout(() => {
+                        uploadSection.classList.add('hidden');
+                        quizSection.classList.remove('hidden');
+                        scoreSection.classList.remove('hidden');
+                        startQuiz();
+                    }, 1000);
+                } else {
+                    fileStatus.textContent = 'Error: No valid data found in CSV. Please ensure it has at least two columns.';
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            const data = [];
+            for (let i = 1; i < lines.length; i++) {
+                const columns = lines[i].match(/(?:\"[^\"]*\"|[^,])+/g)
+                                   .map(col => col.replace(/"/g, '').trim())
+                                   .filter(col => col !== ''); 
+                
+                if (columns.length >= 2) {
+                    const question = columns[0];
+                    const correctAnswer = columns[1];
+                    
+                    // Filter out the correct answer from the list of incorrect options
+                    const incorrectOptions = columns.slice(2).filter(option => option !== correctAnswer);
+                    
+                    // Create a unique set of incorrect options
+                    const uniqueIncorrectOptions = [...new Set(incorrectOptions)];
+
+                    // Shuffle the unique incorrect options and take the first 3
+                    const selectedIncorrectOptions = uniqueIncorrectOptions.sort(() => Math.random() - 0.5).slice(0, 3);
+                    
+                    // Combine the correct answer with the selected unique incorrect options
+                    const optionsToDisplay = [correctAnswer, ...selectedIncorrectOptions];
+
+                    data.push({
+                        question: question,
+                        correctAnswer: correctAnswer,
+                        options: optionsToDisplay
+                    });
+                }
+            }
+            return data.sort(() => Math.random() - 0.5);
+        }
+
+        function startQuiz() {
+            currentQuestionIndex = 0;
+            score = 0;
+            scoreDisplay.textContent = `Score: ${score}`;
+            showQuestion();
+        }
+
+        function showQuestion() {
+            if (currentQuestionIndex < quizData.length) {
+                isAnswered = false;
+                const currentQuestion = quizData[currentQuestionIndex];
+                questionEl.textContent = currentQuestion.question;
+                feedbackEl.textContent = '';
+                nextBtn.classList.add('hidden');
+                
+                choicesContainer.innerHTML = '';
+                
+                const shuffledChoices = currentQuestion.options.sort(() => Math.random() - 0.5);
+                
+                shuffledChoices.forEach(choice => {
+                    const button = document.createElement('button');
+                    button.textContent = choice;
+                    button.classList.add(
+                        'w-full', 'py-3', 'px-4', 'rounded-xl', 'bg-gray-700', 'text-white', 'font-semibold',
+                        'hover:bg-blue-600', 'transition', 'duration-300', 'ease-in-out'
+                    );
+                    button.dataset.choice = choice;
+                    choicesContainer.appendChild(button);
+                });
+
+            } else {
+                quizData.sort(() => Math.random() - 0.5);
+                startQuiz();
+            }
+        }
+
+        choicesContainer.addEventListener('click', (event) => {
+            if (isAnswered) return;
+            const clickedButton = event.target.closest('button');
+            if (!clickedButton) return;
+            isAnswered = true;
+            
+            const userAnswer = clickedButton.dataset.choice;
+            const correctAnswer = quizData[currentQuestionIndex].correctAnswer;
+            
+            Array.from(choicesContainer.children).forEach(button => {
+                const choice = button.dataset.choice;
+                if (choice === correctAnswer) {
+                    button.classList.add('correct-answer');
+                    button.classList.remove('hover:bg-blue-600');
+                } else {
+                    button.classList.add('incorrect-answer');
+                    button.classList.remove('hover:bg-blue-600');
+                }
+                button.disabled = true;
+            });
+
+            if (userAnswer === correctAnswer) {
+                score++;
+                feedbackEl.textContent = 'Correct!';
+                feedbackEl.classList.add('text-green-400');
+                feedbackEl.classList.remove('text-red-400');
+            } else {
+                feedbackEl.textContent = `Incorrect. The correct answer was: "${correctAnswer}".`;
+                feedbackEl.classList.add('text-red-400');
+                feedbackEl.classList.remove('text-green-400');
+            }
+            scoreDisplay.textContent = `Score: ${score}`;
+            nextBtn.classList.remove('hidden');
+        });
+
+        nextBtn.addEventListener('click', () => {
+            currentQuestionIndex++;
+            showQuestion();
+        });
+
+        restartBtn.addEventListener('click', () => {
+            startQuiz();
+        });
+
+    </script>
+</body>
+</html>
